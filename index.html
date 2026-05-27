@@ -198,11 +198,20 @@
             background: var(--danger);
             box-shadow: 0 4px 10px rgba(255,118,117,0.3);
         }
+        .btn-secondary {
+            background: var(--text-secondary);
+            box-shadow: none;
+        }
         .btn-sm {
             padding: 6px 10px;
             font-size: 0.75rem;
             border-radius: 10px;
             width: auto;
+        }
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
         }
         .input-group {
             margin-bottom: 16px;
@@ -283,6 +292,11 @@
             transition: all var(--transition);
         }
         .floating-btn:active { transform: scale(0.9); }
+        .floating-btn-share {
+            bottom: 90px;
+            background: var(--success);
+            box-shadow: 0 8px 25px rgba(0,184,148,0.5);
+        }
         .text-xs { font-size: 0.75rem; color: var(--text-secondary); }
         .icono-categoria {
             display: inline-flex;
@@ -311,9 +325,7 @@
             transition: opacity 0.3s;
             pointer-events: none;
         }
-        .offline-badge.show {
-            opacity: 0.9;
-        }
+        .offline-badge.show { opacity: 0.9; }
     </style>
 </head>
 <body>
@@ -342,6 +354,7 @@
     </div>
     <div id="categoriasContainer"></div>
     <button class="floating-btn" onclick="switchTab('historial')">+</button>
+    <button class="floating-btn floating-btn-share" onclick="compartirResumen()">📤</button>
 </div>
 
 <!-- Metas -->
@@ -354,6 +367,10 @@
         <h3>📊 Distribución de gastos (%)</h3>
         <div id="porcentajesContainer"></div>
         <button class="btn" onclick="guardarConfig()">💾 Guardar y Aplicar</button>
+        <div class="btn-group" style="margin-top:12px;">
+            <button class="btn btn-secondary" onclick="exportarDatos()">📤 Exportar</button>
+            <button class="btn btn-secondary" onclick="importarDatos()">📥 Importar</button>
+        </div>
         <p class="text-xs" style="margin-top:8px;">Los datos se guardan en tu navegador.</p>
     </div>
 </div>
@@ -395,9 +412,8 @@
 <div id="offlineBadge" class="offline-badge">📡 Sin conexión</div>
 
 <script>
-    const STORAGE_KEY = 'controlGastos_v10';
-    const CACHE_NAME = 'gasto-pwa-v1';
-    // Categorías con Aseo añadido (Comida ajustada a 47%)
+    const STORAGE_KEY = 'controlGastos_v11';
+    const CACHE_NAME = 'gasto-pwa-v2';
     const categorias = [
         { key: 'Comida', letra: 'C', color: '#e74c3c', pctDefault: 47 },
         { key: 'Medicamentos', letra: 'M', color: '#8b5cf6', pctDefault: 10.4 },
@@ -425,9 +441,7 @@
                 appData.ingreso = p.ingreso || 0;
                 if (p.porcentajes) {
                     categorias.forEach(c => {
-                        if (p.porcentajes[c.key] !== undefined) {
-                            appData.porcentajes[c.key] = p.porcentajes[c.key];
-                        }
+                        if (p.porcentajes[c.key] !== undefined) appData.porcentajes[c.key] = p.porcentajes[c.key];
                     });
                 }
                 appData.gastos = p.gastos || [];
@@ -436,22 +450,15 @@
     }
     function guardar() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
 
-    function presupuesto(cat) {
-        const pct = appData.porcentajes[cat] || 0;
-        return (appData.ingreso * pct) / 100;
-    }
-    function gastado(cat) {
-        return appData.gastos.filter(g => g.categoria === cat).reduce((a, g) => a + g.monto, 0);
-    }
+    function presupuesto(cat) { return (appData.ingreso * (appData.porcentajes[cat] || 0)) / 100; }
+    function gastado(cat) { return appData.gastos.filter(g => g.categoria === cat).reduce((a, g) => a + g.monto, 0); }
     function restante(cat) { return presupuesto(cat) - gastado(cat); }
     function totalPresupuesto() { return categorias.reduce((a, c) => a + presupuesto(c.key), 0); }
     function totalGastado() { return appData.gastos.reduce((a, g) => a + g.monto, 0); }
     function totalRestante() { return totalPresupuesto() - totalGastado(); }
     function ahorro() { return Math.max(0, appData.ingreso - totalPresupuesto()); }
 
-    function fmt(num) {
-        return num.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+    function fmt(num) { return num.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
     function renderResumen() {
         document.getElementById('ingresoDisplay').textContent = fmt(appData.ingreso);
@@ -504,7 +511,7 @@
     function renderConfig() {
         document.getElementById('inputIngreso').value = appData.ingreso || '';
         const pctCont = document.getElementById('porcentajesContainer');
-        if (!pctCont.hasChildNodes()) {
+        if (!pctCont.hasChildNodes() || pctCont.children.length === 0) {
             pctCont.innerHTML = categorias.map(cat => {
                 const icono = `<span class="icono-categoria" style="background:${cat.color};">${cat.letra}</span>`;
                 return `<div class="input-group">
@@ -516,9 +523,7 @@
         } else {
             categorias.forEach(cat => {
                 const inp = document.getElementById('pct_' + cat.key);
-                if (inp && document.activeElement !== inp) {
-                    inp.value = appData.porcentajes[cat.key];
-                }
+                if (inp && document.activeElement !== inp) inp.value = appData.porcentajes[cat.key];
             });
         }
     }
@@ -529,7 +534,7 @@
             lista.innerHTML = '<p style="text-align:center; color:var(--text-secondary); padding:20px;">Sin gastos aún</p>';
             return;
         }
-        const ultimos = [...appData.gastos].reverse().slice(0, 20);
+        const ultimos = [...appData.gastos].reverse().slice(0, 50);
         lista.innerHTML = ultimos.map(g => {
             const cat = categorias.find(c => c.key === g.categoria);
             const icono = cat ? `<span class="icono-categoria" style="background:${cat.color}; font-size:0.7rem; width:26px; height:26px;">${cat.letra}</span>` : '?';
@@ -554,7 +559,7 @@
 
     function recalcularTodo() {
         const ingInput = document.getElementById('inputIngreso');
-        appData.ingreso = parseFloat(ingInput.value) || 0;
+        if (ingInput) appData.ingreso = parseFloat(ingInput.value) || 0;
         guardar();
         renderResumen();
         renderConfig();
@@ -563,10 +568,8 @@
     function guardarConfig() {
         recalcularTodo();
         let mensaje = `✅ Configuración guardada\nIngreso: $${fmt(appData.ingreso)}\n`;
-        categorias.forEach(c => {
-            mensaje += `${c.letra}: ${appData.porcentajes[c.key]}%\n`;
-        });
-        mensaje += `💰 Ahorro: 7.2%`;
+        categorias.forEach(c => { mensaje += `${c.key}: ${appData.porcentajes[c.key]}%\n`; });
+        mensaje += `💰 Ahorro: ${((ahorro() / appData.ingreso)*100).toFixed(1)}% del ingreso`;
         toast(mensaje);
         switchTab('presupuesto');
     }
@@ -609,61 +612,100 @@
         else if (tab === 'historial') renderHistorial();
     }
 
-    // --- TOAST CORREGIDO: siempre desaparece a los 3 segundos ---
+    // Compartir resumen
+    async function compartirResumen() {
+        const texto = `💰 Mis gastos este mes:
+📊 Presupuesto total: $${fmt(totalPresupuesto())}
+💸 Gastado: $${fmt(totalGastado())}
+✅ Restante: $${fmt(totalRestante())}
+🏦 Ahorro: $${fmt(ahorro())}
+
+${categorias.map(c => `${c.key}: $${fmt(gastado(c.key))} / $${fmt(presupuesto(c.key))}`).join('\n')}`;
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Mi Control de Gastos',
+                    text: texto,
+                    url: window.location.href
+                });
+                toast('¡Compartido!');
+            } catch (e) { toast('Compartir cancelado'); }
+        } else {
+            toast('Tu navegador no soporta compartir. Copia el texto manualmente.');
+            console.log(texto);
+        }
+    }
+
+    // Exportar datos
+    function exportarDatos() {
+        const dataStr = JSON.stringify(appData, null, 2);
+        const blob = new Blob([dataStr], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `gastos_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('Datos exportados');
+    }
+
+    // Importar datos
+    function importarDatos() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => {
+                try {
+                    const imported = JSON.parse(ev.target.result);
+                    if (imported.ingreso !== undefined && imported.porcentajes && imported.gastos !== undefined) {
+                        appData = imported;
+                        guardar();
+                        recalcularTodo();
+                        renderHistorial();
+                        toast('Datos importados correctamente');
+                        switchTab('presupuesto');
+                    } else throw new Error();
+                } catch (err) { toast('Archivo inválido'); }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    }
+
+    // Toast con desaparición automática a los 3 segundos
     let toastTimeout = null;
     function toast(msg) {
         const t = document.getElementById('toast');
         if (!t) return;
-        
-        // Si ya hay un timeout activo, lo cancelamos
         if (toastTimeout) clearTimeout(toastTimeout);
-        
-        // Actualizar mensaje
         t.textContent = msg;
-        
-        // Forzar reinicio de la animación
         t.classList.remove('show');
-        // Pequeño retraso para que el navegador registre el cambio
-        setTimeout(() => {
-            t.classList.add('show');
-        }, 10);
-        
-        // Configurar nuevo timeout para ocultar después de 3 segundos
-        toastTimeout = setTimeout(() => {
-            t.classList.remove('show');
-            toastTimeout = null;
-        }, 3000);
+        setTimeout(() => t.classList.add('show'), 10);
+        toastTimeout = setTimeout(() => { t.classList.remove('show'); toastTimeout = null; }, 3000);
     }
-
     function ocultarToast() {
         const t = document.getElementById('toast');
-        if (t && toastTimeout) {
-            clearTimeout(toastTimeout);
-            toastTimeout = null;
-            t.classList.remove('show');
-        }
+        if (t && toastTimeout) { clearTimeout(toastTimeout); toastTimeout = null; t.classList.remove('show'); }
     }
 
-    // --- PWA: Registro del Service Worker ---
+    // Service Worker
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('service-worker.js').then(reg => {
-                console.log('Service Worker registrado con éxito:', reg.scope);
-            }).catch(err => {
-                console.error('Error al registrar el Service Worker:', err);
-            });
+                console.log('SW registrado:', reg.scope);
+            }).catch(err => console.error('Error SW:', err));
         });
     }
 
-    // Detectar conexión offline/online
+    // Online/offline
     function updateOnlineStatus() {
         const badge = document.getElementById('offlineBadge');
-        if (!navigator.onLine) {
-            badge.classList.add('show');
-            toast('⚠️ Estás sin conexión. Los datos se guardarán localmente.');
-        } else {
-            badge.classList.remove('show');
-        }
+        if (!navigator.onLine) { badge.classList.add('show'); toast('⚠️ Sin conexión. Los datos se guardan localmente.'); }
+        else badge.classList.remove('show');
     }
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
