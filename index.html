@@ -609,20 +609,39 @@
         else if (tab === 'historial') renderHistorial();
     }
 
+    // --- TOAST CORREGIDO: siempre desaparece a los 3 segundos ---
+    let toastTimeout = null;
     function toast(msg) {
         const t = document.getElementById('toast');
+        if (!t) return;
+        
+        // Si ya hay un timeout activo, lo cancelamos
+        if (toastTimeout) clearTimeout(toastTimeout);
+        
+        // Actualizar mensaje
         t.textContent = msg;
+        
+        // Forzar reinicio de la animación
         t.classList.remove('show');
-        void t.offsetWidth;
-        t.classList.add('show');
-        clearTimeout(t._timeout);
-        t._timeout = setTimeout(() => t.classList.remove('show'), 3000);
+        // Pequeño retraso para que el navegador registre el cambio
+        setTimeout(() => {
+            t.classList.add('show');
+        }, 10);
+        
+        // Configurar nuevo timeout para ocultar después de 3 segundos
+        toastTimeout = setTimeout(() => {
+            t.classList.remove('show');
+            toastTimeout = null;
+        }, 3000);
     }
 
     function ocultarToast() {
         const t = document.getElementById('toast');
-        t.classList.remove('show');
-        clearTimeout(t._timeout);
+        if (t && toastTimeout) {
+            clearTimeout(toastTimeout);
+            toastTimeout = null;
+            t.classList.remove('show');
+        }
     }
 
     // --- PWA: Registro del Service Worker ---
